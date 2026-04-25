@@ -12,6 +12,7 @@ The Atelier Desktop is a local-first Electron app built around a strict renderer
 - TypeScript
 - Tailwind CSS v4
 - Zod
+- Lucide React
 
 ## Process boundaries
 
@@ -27,6 +28,7 @@ Renderer -> Preload bridge -> IPC -> Main process services -> Filesystem / OS
 - local UI state
 - calling `window.atelier`
 - showing project, artwork, and job state
+- never importing Electron, filesystem, path, or Node modules
 
 ### Preload
 
@@ -40,6 +42,7 @@ Renderer -> Preload bridge -> IPC -> Main process services -> Filesystem / OS
 - owns OS file manager actions
 - owns app settings JSON
 - owns workspace/project/artwork/job services
+- opens native dialogs for workspace and artwork file selection
 
 ## Current module layout
 
@@ -71,6 +74,13 @@ IPC is split by domain:
 
 Handlers return `Result<T>` and validate incoming payloads with Zod or equivalent checks.
 
+Current exposed domains:
+
+- workspace selection and restoration
+- project creation/listing/detail/folder opening
+- source artwork selection/import/listing/preview/reveal
+- in-memory jobs listing/demo/clear-completed
+
 ## Sprint 1 status
 
 ### Done
@@ -79,8 +89,9 @@ Handlers return `Result<T>` and validate incoming payloads with Zod or equivalen
 - Workspace selection and persistence
 - Project creation and listing
 - Project dashboard
-- Artwork import and gallery
+- Artwork import and source gallery
 - In-memory jobs panel
+- Documentation cleanup
 
 ### Known limitations
 

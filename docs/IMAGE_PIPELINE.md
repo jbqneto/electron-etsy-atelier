@@ -69,6 +69,67 @@ Printable variants should be generated from upscaled artwork whenever available.
 
 If no upscaled artwork exists, allow generation from source image but warn the user.
 
+Current Sprint 2 implementation generates printable ratios from imported source artwork because
+upscaling is not implemented yet. The renderer triggers generation through:
+
+```ts
+window.atelier.imagePipeline.generatePrintableRatios(projectId)
+```
+
+The main process loads selected image cards, uses manual crop data when available, falls back to
+the shared auto-crop algorithm, then uses Sharp to extract, resize and write JPG files.
+
+Output is written under:
+
+```txt
+projects/<project-slug>/03-printable-ratios/
+  <artworkBaseName>/
+    <ratioFolderName>/
+      <filename>.jpg
+```
+
+For the first implementation only the largest export size per selected ratio group is generated,
+matching `exportLargestOnly`. JPG quality defaults to `92`, and generated files are written with
+300 DPI metadata where Sharp supports it.
+
+Generated output metadata is stored back in:
+
+```txt
+projects/<project-slug>/.atelier/image-cards.json
+```
+
+Each output entry stores the ratio group, size label, dimensions, filename, folder name,
+project-relative path and generation timestamp.
+
+## Ported domain foundation
+
+The pure Wall Art Cropper domain logic is now available under:
+
+```txt
+src/shared/image-pipeline/
+```
+
+Current modules include:
+
+- ratio presets for portrait, landscape, ISO and Frame TV bonus exports;
+- source orientation detection;
+- initial working orientation selection;
+- center-based auto crop calculation;
+- crop coverage calculation;
+- crop suitability classification;
+- default ratio selection rules;
+- printable output filename helpers.
+
+These modules do not import Electron, Node, Sharp or browser APIs, so they can be used by the main process services and renderer UI safely.
+
+Scanned image cards are persisted per project in:
+
+```txt
+projects/<project-slug>/.atelier/image-cards.json
+```
+
+The scan step reads imported source artworks with Sharp in the main process and stores durable pipeline state for ratio selection, future manual crops, future upscaled assets and generated outputs.
+
 ## Default ratio presets
 
 These presets should be configurable.
@@ -156,6 +217,18 @@ Use Sharp for:
 - format conversion;
 - compositing;
 - thumbnail generation.
+
+## Sprint 2 foundation
+
+Sharp is installed as a main-process dependency and exposed only through the image pipeline IPC surface.
+
+Current validation API:
+
+```ts
+window.atelier.imagePipeline.validateSharp()
+```
+
+The validation creates a tiny in-memory image in the Electron main process, resizes it to `1x1`, encodes it as PNG, and returns the Sharp/libvips versions plus output information. The renderer never imports Sharp or reads files directly.
 
 Recommended output defaults:
 

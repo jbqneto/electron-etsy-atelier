@@ -1,4 +1,16 @@
-import type { ArtworkItem, Job, ProjectSummary, Result, FolderKey } from './ipc'
+import type {
+  ArtworkItem,
+  Job,
+  ProjectSummary,
+  Result,
+  FolderKey,
+  SharpValidationResult
+} from './ipc'
+import type {
+  GeneratePrintableRatiosResult,
+  ImageCard,
+  UpdateImageCardInput
+} from '../image-pipeline'
 import type { AppSettings } from './settings'
 import type { Project } from './project'
 import type { WorkspaceState } from './workspace-state'
@@ -40,6 +52,17 @@ export type AtelierApi = {
     listJobs: () => Promise<Result<Job[]>>
     clearCompletedJobs: () => Promise<Result<null>>
     createDemoJob: () => Promise<Result<Job>>
+  }
+  imagePipeline: {
+    validateSharp: () => Promise<Result<SharpValidationResult>>
+    scanSourceArtworks: (projectId: string) => Promise<Result<ImageCard[]>>
+    listImageCards: (projectId: string) => Promise<Result<ImageCard[]>>
+    updateImageCard: (
+      projectId: string,
+      cardId: string,
+      input: UpdateImageCardInput
+    ) => Promise<Result<ImageCard>>
+    generatePrintableRatios: (projectId: string) => Promise<Result<GeneratePrintableRatiosResult>>
   }
 }
 

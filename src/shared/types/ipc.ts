@@ -37,6 +37,15 @@ export interface ProjectSummary {
   }>
 }
 
+export interface SharpValidationResult {
+  sharpVersion: string
+  libvipsVersion: string
+  outputFormat: string
+  width: number
+  height: number
+  sizeBytes: number
+}
+
 export interface Job {
   id: string
   type: string

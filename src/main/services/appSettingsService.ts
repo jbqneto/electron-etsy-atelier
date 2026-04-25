@@ -44,7 +44,11 @@ export class AppSettingsService {
 
   async writeSettings(settings: AppSettings): Promise<void> {
     await ensureSettingsDirectory()
-    await writeFile(settingsPath, JSON.stringify(appSettingsSchema.parse(settings), null, 2), 'utf-8')
+    await writeFile(
+      settingsPath,
+      JSON.stringify(appSettingsSchema.parse(settings), null, 2),
+      'utf-8'
+    )
   }
 
   private async backupCorruptedSettings(): Promise<void> {

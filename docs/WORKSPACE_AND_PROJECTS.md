@@ -6,6 +6,7 @@ A workspace is a user-selected local folder. When initialized, it is expanded in
 
 ```txt
 atelier-workspace/
+  atelier.config.json
   .atelier/
     workspace.json
   projects/
@@ -14,7 +15,7 @@ atelier-workspace/
   exports/
 ```
 
-The workspace metadata is stored in `.atelier/workspace.json`. App settings are stored separately in Electron `userData` as JSON and currently keep `lastWorkspacePath`.
+The workspace metadata is stored in `atelier.config.json` at the workspace root. `.atelier/workspace.json` is still written as a legacy compatibility copy. App settings are stored separately in Electron `userData` as JSON and currently keep `lastWorkspacePath`.
 
 ## Workspace metadata
 
@@ -78,14 +79,14 @@ window.atelier.workspace.initializeWorkspace(path)
 window.atelier.projects.createProject(input)
 window.atelier.projects.listProjects()
 window.atelier.projects.openProjectFolder(projectId)
+window.atelier.projects.openProjectSubfolder(projectId, folderKey)
+window.atelier.projects.getProjectSummary(projectId)
 ```
 
 All methods return the `Result<T>` shape:
 
 ```ts
-type Result<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string }
+type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 ```
 
 ## Current limitations
@@ -93,8 +94,8 @@ type Result<T> =
 - Metadata is persisted as JSON files only.
 - There is no SQLite index yet.
 - Project editing, rename and delete actions are not implemented.
-- Asset import, image processing and mockup tools are still placeholders.
+- Image processing and mockup tools are still placeholders.
 
 ## Next planned module
 
-The next planned module is the project asset and image pipeline layer, starting with import flows and local processing job records.
+The next planned module is the image pipeline layer, starting with preview optimization, thumbnail generation and ratio generation jobs.

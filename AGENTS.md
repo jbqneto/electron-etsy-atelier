@@ -32,7 +32,7 @@ The goal is not to create a generic image editor. The goal is to automate a very
 3. Do not expose raw `ipcRenderer`, `fs`, `path`, `child_process`, `shell`, `sqlite` or `sharp` to the renderer.
 4. Use preload APIs as narrow typed contracts.
 5. Main process owns filesystem, SQLite, Sharp and external process execution.
-6. Renderer owns UI and user interaction only.
+6. Renderer owns UI and user interaction only and should never access access filesystem directly.
 7. Validate all IPC inputs with Zod or equivalent runtime validation.
 8. Never execute arbitrary shell commands from user input.
 9. External tools such as upscalers must be configured through whitelisted executable paths.
@@ -53,7 +53,12 @@ Each slice should include:
 - basic tests where practical;
 - documentation update when behavior changes.
 
-Do not implement large speculative features.
+Do not implement large speculative features. Before implementing each task:
+
+- inspect the current codebase
+- identify existing patterns
+- reuse existing layout/components where possible
+- keep changes small
 
 There is another project with some implementation already done, check there for example or even copying the existing funcionalities
 

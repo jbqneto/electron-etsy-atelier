@@ -9,8 +9,7 @@ import {
   getCurrentWorkspace,
   getCurrentWorkspacePath,
   initializeWorkspaceAtPath,
-  listProjectsInWorkspace,
-  openProjectFolderInSystem
+  listProjectsInWorkspace
 } from '../services/workspaceService'
 
 function ok<T>(data: T): Result<T> {
@@ -90,22 +89,6 @@ export function registerWorkspaceIpc(): void {
       return ok(await listProjectsInWorkspace(workspacePath))
     } catch (error) {
       return fail<Project[]>(error instanceof Error ? error.message : 'Failed to list projects')
-    }
-  })
-
-  ipcMain.handle('projects:openProjectFolder', async (_event, projectId: unknown) => {
-    if (typeof projectId !== 'string' || !projectId.trim()) {
-      return fail<null>('Project id is required')
-    }
-
-    const workspacePath = await resolveWorkspacePath()
-    if (!workspacePath) return fail<null>('No workspace selected')
-
-    try {
-      await openProjectFolderInSystem(workspacePath, projectId)
-      return ok<null>(null)
-    } catch (error) {
-      return fail<null>(error instanceof Error ? error.message : 'Failed to open project folder')
     }
   })
 }

@@ -74,40 +74,46 @@ export function registerArtworksIpc(): void {
     }
   })
 
-  ipcMain.handle('artworks:getArtworkPreviewUrl', async (_event, projectId: unknown, artworkId: unknown) => {
-    if (typeof projectId !== 'string' || !projectId.trim()) {
-      return fail<string>('Project id is required')
-    }
-    if (typeof artworkId !== 'string' || !artworkId.trim()) {
-      return fail<string>('Artwork id is required')
-    }
+  ipcMain.handle(
+    'artworks:getArtworkPreviewUrl',
+    async (_event, projectId: unknown, artworkId: unknown) => {
+      if (typeof projectId !== 'string' || !projectId.trim()) {
+        return fail<string>('Project id is required')
+      }
+      if (typeof artworkId !== 'string' || !artworkId.trim()) {
+        return fail<string>('Artwork id is required')
+      }
 
-    const workspacePath = await getCurrentWorkspacePath()
-    if (!workspacePath) return fail<string>('No workspace selected')
+      const workspacePath = await getCurrentWorkspacePath()
+      if (!workspacePath) return fail<string>('No workspace selected')
 
-    try {
-      return ok(await getArtworkPreviewUrlInProject(workspacePath, projectId, artworkId))
-    } catch (error) {
-      return fail<string>(error instanceof Error ? error.message : 'Failed to load preview')
+      try {
+        return ok(await getArtworkPreviewUrlInProject(workspacePath, projectId, artworkId))
+      } catch (error) {
+        return fail<string>(error instanceof Error ? error.message : 'Failed to load preview')
+      }
     }
-  })
+  )
 
-  ipcMain.handle('artworks:revealArtworkInFolder', async (_event, projectId: unknown, artworkId: unknown) => {
-    if (typeof projectId !== 'string' || !projectId.trim()) {
-      return fail<null>('Project id is required')
-    }
-    if (typeof artworkId !== 'string' || !artworkId.trim()) {
-      return fail<null>('Artwork id is required')
-    }
+  ipcMain.handle(
+    'artworks:revealArtworkInFolder',
+    async (_event, projectId: unknown, artworkId: unknown) => {
+      if (typeof projectId !== 'string' || !projectId.trim()) {
+        return fail<null>('Project id is required')
+      }
+      if (typeof artworkId !== 'string' || !artworkId.trim()) {
+        return fail<null>('Artwork id is required')
+      }
 
-    const workspacePath = await getCurrentWorkspacePath()
-    if (!workspacePath) return fail<null>('No workspace selected')
+      const workspacePath = await getCurrentWorkspacePath()
+      if (!workspacePath) return fail<null>('No workspace selected')
 
-    try {
-      await revealArtworkInFolderInProject(workspacePath, projectId, artworkId)
-      return ok<null>(null)
-    } catch (error) {
-      return fail<null>(error instanceof Error ? error.message : 'Failed to reveal artwork')
+      try {
+        await revealArtworkInFolderInProject(workspacePath, projectId, artworkId)
+        return ok<null>(null)
+      } catch (error) {
+        return fail<null>(error instanceof Error ? error.message : 'Failed to reveal artwork')
+      }
     }
-  })
+  )
 }

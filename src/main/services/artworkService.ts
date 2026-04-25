@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { copyFile, mkdir, readFile, stat } from 'fs/promises'
 import { existsSync } from 'fs'
-import { basename, extname, join } from 'path'
+import { basename, extname, isAbsolute, join, relative, resolve } from 'path'
 import { shell } from 'electron'
 
 import type { ArtworkItem } from '../../shared/types/ipc'
@@ -12,6 +12,16 @@ const allowedExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp'])
 
 type ArtworkMetadata = {
   items: ArtworkItem[]
+}
+
+function assertPathInside(parentPath: string, childPath: string): void {
+  const resolvedParent = resolve(parentPath)
+  const resolvedChild = resolve(childPath)
+  const relation = relative(resolvedParent, resolvedChild)
+
+  if (relation === '' || (!relation.startsWith('..') && !isAbsolute(relation))) return
+
+  throw new Error('Resolved artwork path is outside the project')
 }
 
 function artworkMetadataPath(projectPath: string): string {
@@ -52,7 +62,9 @@ export async function importArtworkFilesToProject(
   if (!project) throw new Error('Project not found')
 
   const projectPath = join(workspacePath, 'projects', project.slug)
+  assertPathInside(join(workspacePath, 'projects'), projectPath)
   const sourceDir = join(projectPath, '01-source-artworks')
+  assertPathInside(projectPath, sourceDir)
   await mkdir(sourceDir, { recursive: true })
 
   const metadata = await loadArtworkMetadata(projectPath)
@@ -94,7 +106,9 @@ export async function listArtworkFilesInProject(
     (entry) => entry.id === projectId
   )
   if (!project) throw new Error('Project not found')
-  const metadata = await loadArtworkMetadata(join(workspacePath, 'projects', project.slug))
+  const projectPath = join(workspacePath, 'projects', project.slug)
+  assertPathInside(join(workspacePath, 'projects'), projectPath)
+  const metadata = await loadArtworkMetadata(projectPath)
   return metadata.items
 }
 
@@ -112,7 +126,10 @@ export async function getArtworkPreviewUrlInProject(
   const artwork = metadata.items.find((item) => item.id === artworkId)
   if (!artwork) throw new Error('Artwork not found')
 
-  const filePath = join(workspacePath, 'projects', project.slug, artwork.relativePath)
+  const projectPath = join(workspacePath, 'projects', project.slug)
+  assertPathInside(join(workspacePath, 'projects'), projectPath)
+  const filePath = join(projectPath, artwork.relativePath)
+  assertPathInside(projectPath, filePath)
   const content = await readFile(filePath)
   const mimeType =
     artwork.extension === '.png'
@@ -137,5 +154,10 @@ export async function revealArtworkInFolderInProject(
   const artwork = metadata.items.find((item) => item.id === artworkId)
   if (!artwork) throw new Error('Artwork not found')
 
-  await shell.showItemInFolder(join(workspacePath, 'projects', project.slug, artwork.relativePath))
+  const projectPath = join(workspacePath, 'projects', project.slug)
+  assertPathInside(join(workspacePath, 'projects'), projectPath)
+  const filePath = join(projectPath, artwork.relativePath)
+  assertPathInside(projectPath, filePath)
+
+  await shell.showItemInFolder(filePath)
 }

@@ -13,6 +13,7 @@ import { AppShell } from './components/AppShell'
 import { ProjectDetail } from './features/projects/ProjectDetail'
 import { ProjectWorkspacePanel } from './features/projects/ProjectWorkspacePanel'
 import type { CreateProjectInput } from '../../shared/types/app'
+import type { ImageCard, UpdateImageCardInput } from '../../shared/image-pipeline'
 import type { ArtworkItem, FolderKey, Job, ProjectSummary } from '../../shared/types/ipc'
 import type { Project } from '../../shared/types/project'
 import type { WorkspaceState } from '../../shared/types/workspace-state'
@@ -30,13 +31,21 @@ function App(): React.JSX.Element {
   const [pingResult, setPingResult] = useState<string | null>(null)
   const [pingError, setPingError] = useState<string | null>(null)
   const [isPinging, setIsPinging] = useState(false)
+  const [sharpValidationMessage, setSharpValidationMessage] = useState(
+    'Sharp has not been validated yet.'
+  )
+  const [sharpValidationStatus, setSharpValidationStatus] = useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('idle')
   const [workspaceState, setWorkspaceState] = useState<WorkspaceState | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [projectSummary, setProjectSummary] = useState<ProjectSummary | null>(null)
   const [artworks, setArtworks] = useState<ArtworkItem[]>([])
+  const [imageCards, setImageCards] = useState<ImageCard[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
   const [statusError, setStatusError] = useState<string | null>(null)
+  const [projectDetailError, setProjectDetailError] = useState<string | null>(null)
   const [isLoadingProjects, setIsLoadingProjects] = useState(false)
   const [isLoadingProjectDetail, setIsLoadingProjectDetail] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -53,14 +62,17 @@ function App(): React.JSX.Element {
     if (!projectId) {
       setProjectSummary(null)
       setArtworks([])
+      setImageCards([])
       return
     }
 
     setIsLoadingProjectDetail(true)
+    setProjectDetailError(null)
 
-    const [summaryResult, artworksResult] = await Promise.all([
+    const [summaryResult, artworksResult, imageCardsResult] = await Promise.all([
       window.atelier.projects.getProjectSummary(projectId),
-      window.atelier.artworks.listSourceArtworks(projectId)
+      window.atelier.artworks.listSourceArtworks(projectId),
+      window.atelier.imagePipeline.listImageCards(projectId)
     ])
 
     if (summaryResult.ok) {
@@ -68,6 +80,7 @@ function App(): React.JSX.Element {
     } else {
       setProjectSummary(null)
       setStatusError(summaryResult.error)
+      setProjectDetailError(summaryResult.error)
     }
 
     if (artworksResult.ok) {
@@ -75,6 +88,15 @@ function App(): React.JSX.Element {
     } else {
       setArtworks([])
       setStatusError(artworksResult.error)
+      setProjectDetailError(artworksResult.error)
+    }
+
+    if (imageCardsResult.ok) {
+      setImageCards(imageCardsResult.data)
+    } else {
+      setImageCards([])
+      setStatusError(imageCardsResult.error)
+      setProjectDetailError(imageCardsResult.error)
     }
 
     setIsLoadingProjectDetail(false)
@@ -137,6 +159,23 @@ function App(): React.JSX.Element {
     }
   }
 
+  const handleValidateSharp = async (): Promise<void> => {
+    setSharpValidationStatus('loading')
+    setSharpValidationMessage('Running Sharp validation in the main process...')
+
+    const result = await window.atelier.imagePipeline.validateSharp()
+    if (result.ok) {
+      setSharpValidationStatus('success')
+      setSharpValidationMessage(
+        `Sharp ${result.data.sharpVersion}, libvips ${result.data.libvipsVersion}; generated ${result.data.width}x${result.data.height} ${result.data.outputFormat} (${result.data.sizeBytes} bytes).`
+      )
+      return
+    }
+
+    setSharpValidationStatus('error')
+    setSharpValidationMessage(result.error)
+  }
+
   const handleSelectWorkspace = async (): Promise<void> => {
     setStatusError(null)
     const result = await window.atelier.workspace.selectWorkspace()
@@ -189,10 +228,14 @@ function App(): React.JSX.Element {
 
   const handleImportArtworks = async (): Promise<void> => {
     if (!selectedProject) return
+
     setStatusError(null)
+    setProjectDetailError(null)
+
     const pickResult = await window.atelier.artworks.selectArtworkFiles(selectedProject.id)
     if (!pickResult.ok) {
       setStatusError(pickResult.error)
+      setProjectDetailError(pickResult.error)
       return
     }
     if (pickResult.data.length === 0) return
@@ -203,6 +246,7 @@ function App(): React.JSX.Element {
     )
     if (!importResult.ok) {
       setStatusError(importResult.error)
+      setProjectDetailError(importResult.error)
       return
     }
 
@@ -212,13 +256,88 @@ function App(): React.JSX.Element {
   const handleRequestArtworkPreview = async (artworkId: string): Promise<string | null> => {
     if (!selectedProject) return null
     const result = await window.atelier.artworks.getArtworkPreviewUrl(selectedProject.id, artworkId)
-    return result.ok ? result.data : null
+    if (!result.ok) {
+      setProjectDetailError(result.error)
+      return null
+    }
+    return result.data
   }
 
   const handleRevealArtwork = async (artworkId: string): Promise<void> => {
     if (!selectedProject) return
-    const result = await window.atelier.artworks.revealArtworkInFolder(selectedProject.id, artworkId)
-    if (!result.ok) setStatusError(result.error)
+    const result = await window.atelier.artworks.revealArtworkInFolder(
+      selectedProject.id,
+      artworkId
+    )
+    if (!result.ok) {
+      setStatusError(result.error)
+      setProjectDetailError(result.error)
+    }
+  }
+
+  const handleScanSourceArtworks = async (): Promise<void> => {
+    if (!selectedProject) return
+
+    setStatusError(null)
+    setProjectDetailError(null)
+
+    const result = await window.atelier.imagePipeline.scanSourceArtworks(selectedProject.id)
+    if (!result.ok) {
+      setStatusError(result.error)
+      setProjectDetailError(result.error)
+      return
+    }
+
+    setImageCards(result.data)
+    await loadProjectDetail(selectedProject.id)
+  }
+
+  const handleUpdateImageCard = async (
+    cardId: string,
+    input: UpdateImageCardInput
+  ): Promise<void> => {
+    if (!selectedProject) return
+
+    setStatusError(null)
+    setProjectDetailError(null)
+
+    const result = await window.atelier.imagePipeline.updateImageCard(
+      selectedProject.id,
+      cardId,
+      input
+    )
+    if (!result.ok) {
+      setStatusError(result.error)
+      setProjectDetailError(result.error)
+      return
+    }
+
+    setImageCards((current) =>
+      current.map((card) => (card.id === result.data.id ? result.data : card))
+    )
+  }
+
+  const handleGeneratePrintableRatios = async (): Promise<void> => {
+    if (!selectedProject) return
+
+    setStatusError(null)
+    setProjectDetailError(null)
+
+    const result = await window.atelier.imagePipeline.generatePrintableRatios(selectedProject.id)
+    if (!result.ok) {
+      setStatusError(result.error)
+      setProjectDetailError(result.error)
+      await refreshJobs()
+      return
+    }
+
+    setImageCards(result.data.cards)
+    await refreshJobs()
+    if (result.data.failedCount > 0) {
+      const message = `Generated ${result.data.generatedCount} printable files, ${result.data.failedCount} failed.`
+      setStatusError(message)
+      setProjectDetailError(message)
+    }
   }
 
   const refreshJobs = async (): Promise<void> => {
@@ -230,9 +349,14 @@ function App(): React.JSX.Element {
     const timer = window.setInterval(() => {
       void refreshJobs()
     }, 1000)
+    const initialTimer = window.setTimeout(() => {
+      void refreshJobs()
+    }, 0)
 
-    void refreshJobs()
-    return () => window.clearInterval(timer)
+    return () => {
+      window.clearInterval(timer)
+      window.clearTimeout(initialTimer)
+    }
   }, [])
 
   const handleCreateDemoJob = async (): Promise<void> => {
@@ -256,9 +380,12 @@ function App(): React.JSX.Element {
   return (
     <AppShell
       navigationItems={navigationItems}
+      onValidateSharp={handleValidateSharp}
       onPing={handlePing}
       pingMessage={pingError ?? pingResult ?? 'No IPC response yet.'}
       pingStatus={isPinging ? 'loading' : pingError ? 'error' : pingResult ? 'success' : 'idle'}
+      sharpValidationMessage={sharpValidationMessage}
+      sharpValidationStatus={sharpValidationStatus}
     >
       <header className="flex h-11 items-center justify-between border-b border-zinc-800 bg-[#202024] px-4">
         <div className="flex items-center gap-2 text-sm text-zinc-300">
@@ -286,12 +413,17 @@ function App(): React.JSX.Element {
         />
         <ProjectDetail
           artworks={artworks}
+          error={projectDetailError}
+          imageCards={imageCards}
           isLoading={isLoadingProjectDetail}
+          onGeneratePrintableRatios={() => void handleGeneratePrintableRatios()}
           onImportArtworks={handleImportArtworks}
           onOpenFolder={handleOpenProjectFolderFromDetail}
           onOpenSubfolder={handleOpenProjectSubfolder}
-          onRevealArtwork={handleRevealArtwork}
           onRequestArtworkPreview={handleRequestArtworkPreview}
+          onRevealArtwork={handleRevealArtwork}
+          onScanSourceArtworks={handleScanSourceArtworks}
+          onUpdateImageCard={(cardId, input) => void handleUpdateImageCard(cardId, input)}
           project={selectedProject}
           summary={projectSummary}
         />
@@ -301,13 +433,15 @@ function App(): React.JSX.Element {
         <div className="flex h-9 items-center justify-between border-b border-zinc-800 px-4 text-xs font-medium text-zinc-400">
           <span>Jobs and Logs</span>
           <div className="flex gap-2">
-            <button
-              className="rounded border border-zinc-700 px-2 py-1 text-zinc-300"
-              onClick={() => void handleCreateDemoJob()}
-              type="button"
-            >
-              Demo Job
-            </button>
+            {import.meta.env.DEV ? (
+              <button
+                className="rounded border border-zinc-700 px-2 py-1 text-zinc-300"
+                onClick={() => void handleCreateDemoJob()}
+                type="button"
+              >
+                Demo Job
+              </button>
+            ) : null}
             <button
               className="rounded border border-zinc-700 px-2 py-1 text-zinc-300"
               onClick={() => void handleClearCompletedJobs()}

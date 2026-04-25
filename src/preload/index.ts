@@ -9,7 +9,25 @@ import { workspaceStateSchema } from '../shared/schemas/workspace-state'
 import { artworkItemSchema } from '../shared/schemas/artwork'
 import { projectSummarySchema } from '../shared/schemas/project-summary'
 import { jobSchema } from '../shared/schemas/job'
-import type { ArtworkItem, FolderKey, Job, ProjectSummary, Result } from '../shared/types/ipc'
+import {
+  generatePrintableRatiosResultSchema,
+  imageCardSchema,
+  sharpValidationResultSchema,
+  updateImageCardInputSchema
+} from '../shared/schemas/image-pipeline'
+import type {
+  GeneratePrintableRatiosResult,
+  ImageCard,
+  UpdateImageCardInput
+} from '../shared/image-pipeline'
+import type {
+  ArtworkItem,
+  FolderKey,
+  Job,
+  ProjectSummary,
+  Result,
+  SharpValidationResult
+} from '../shared/types/ipc'
 import type { Project } from '../shared/types/project'
 import type { WorkspaceState } from '../shared/types/workspace-state'
 
@@ -81,9 +99,38 @@ const atelierApi: AtelierApi = {
         Job[]
       >,
     clearCompletedJobs: async () =>
-      resultSchema(z.null()).parse(await ipcRenderer.invoke('jobs:clearCompletedJobs')) as Result<null>,
+      resultSchema(z.null()).parse(
+        await ipcRenderer.invoke('jobs:clearCompletedJobs')
+      ) as Result<null>,
     createDemoJob: async () =>
       resultSchema(jobSchema).parse(await ipcRenderer.invoke('jobs:createDemoJob')) as Result<Job>
+  },
+  imagePipeline: {
+    validateSharp: async () =>
+      resultSchema(sharpValidationResultSchema).parse(
+        await ipcRenderer.invoke('imagePipeline:validateSharp')
+      ) as Result<SharpValidationResult>,
+    scanSourceArtworks: async (projectId: string) =>
+      resultSchema(imageCardSchema.array()).parse(
+        await ipcRenderer.invoke('imagePipeline:scanSourceArtworks', projectId)
+      ) as Result<ImageCard[]>,
+    listImageCards: async (projectId: string) =>
+      resultSchema(imageCardSchema.array()).parse(
+        await ipcRenderer.invoke('imagePipeline:listImageCards', projectId)
+      ) as Result<ImageCard[]>,
+    updateImageCard: async (projectId: string, cardId: string, input: UpdateImageCardInput) =>
+      resultSchema(imageCardSchema).parse(
+        await ipcRenderer.invoke(
+          'imagePipeline:updateImageCard',
+          projectId,
+          cardId,
+          updateImageCardInputSchema.parse(input)
+        )
+      ) as Result<ImageCard>,
+    generatePrintableRatios: async (projectId: string) =>
+      resultSchema(generatePrintableRatiosResultSchema).parse(
+        await ipcRenderer.invoke('imagePipeline:generatePrintableRatios', projectId)
+      ) as Result<GeneratePrintableRatiosResult>
   }
 }
 

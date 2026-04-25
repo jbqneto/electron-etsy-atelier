@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { mkdir, readdir, readFile } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join, resolve } from 'path'
+import { isAbsolute, join, relative, resolve } from 'path'
 
 import { projectSchema } from '../../shared/schemas/project'
 import { workspaceSchema } from '../../shared/schemas/workspace'
@@ -57,8 +57,22 @@ const projectFolderMap: Record<FolderKey, { path: string; label: string; descrip
 
 let currentWorkspaceRecord: WorkspaceState | null = null
 
+function assertPathInside(parentPath: string, childPath: string): void {
+  const resolvedParent = resolve(parentPath)
+  const resolvedChild = resolve(childPath)
+  const relation = relative(resolvedParent, resolvedChild)
+
+  if (relation === '' || (!relation.startsWith('..') && !isAbsolute(relation))) return
+
+  throw new Error('Resolved folder is outside the workspace')
+}
+
 function workspaceFilePath(workspacePath: string): string {
   return join(workspacePath, '.atelier', 'workspace.json')
+}
+
+function workspaceConfigFilePath(workspacePath: string): string {
+  return join(workspacePath, 'atelier.config.json')
 }
 
 async function ensureWorkspaceStructure(workspacePath: string): Promise<void> {
@@ -90,12 +104,20 @@ export async function initializeWorkspaceAtPath(workspacePath: string): Promise<
   const resolvedPath = resolve(workspacePath)
   await ensureWorkspaceStructure(resolvedPath)
 
-  const metaPath = workspaceFilePath(resolvedPath)
+  const configPath = workspaceConfigFilePath(resolvedPath)
+  const legacyMetaPath = workspaceFilePath(resolvedPath)
   let record: WorkspaceState
 
-  if (existsSync(metaPath)) {
+  if (existsSync(configPath)) {
     try {
-      const parsed = workspaceSchema.parse(JSON.parse(await readFile(metaPath, 'utf-8')))
+      const parsed = workspaceSchema.parse(JSON.parse(await readFile(configPath, 'utf-8')))
+      record = createWorkspaceRecord(resolvedPath, parsed)
+    } catch {
+      record = createWorkspaceRecord(resolvedPath)
+    }
+  } else if (existsSync(legacyMetaPath)) {
+    try {
+      const parsed = workspaceSchema.parse(JSON.parse(await readFile(legacyMetaPath, 'utf-8')))
       record = createWorkspaceRecord(resolvedPath, parsed)
     } catch {
       record = createWorkspaceRecord(resolvedPath)
@@ -104,7 +126,8 @@ export async function initializeWorkspaceAtPath(workspacePath: string): Promise<
     record = createWorkspaceRecord(resolvedPath)
   }
 
-  await writeJsonFile(metaPath, workspaceSchema.parse(record.workspace))
+  await writeJsonFile(configPath, workspaceSchema.parse(record.workspace))
+  await writeJsonFile(legacyMetaPath, workspaceSchema.parse(record.workspace))
   await appSettingsService.writeSettings({ lastWorkspacePath: resolvedPath })
   currentWorkspaceRecord = record
   return record
@@ -135,6 +158,15 @@ export async function getCurrentWorkspacePath(): Promise<string | null> {
 }
 
 export async function readWorkspace(workspacePath: string): Promise<Workspace | null> {
+  try {
+    const parsed = workspaceSchema.safeParse(
+      JSON.parse(await readFile(workspaceConfigFilePath(workspacePath), 'utf-8'))
+    )
+    if (parsed.success) return parsed.data
+  } catch {
+    // Fall back to the legacy metadata location below.
+  }
+
   try {
     const parsed = workspaceSchema.safeParse(
       JSON.parse(await readFile(workspaceFilePath(workspacePath), 'utf-8'))
@@ -248,8 +280,12 @@ export async function openProjectFolderInSystem(
   const project = projects.find((entry) => entry.id === projectId)
   if (!project) throw new Error('Project not found')
 
+  const projectPath = join(workspacePath, 'projects', project.slug)
+  assertPathInside(join(workspacePath, 'projects'), projectPath)
+
   const { shell } = await import('electron')
-  await shell.openPath(join(workspacePath, 'projects', project.slug))
+  const errorMessage = await shell.openPath(projectPath)
+  if (errorMessage) throw new Error(errorMessage)
 }
 
 async function countFilesInDirectory(directoryPath: string): Promise<number> {
@@ -270,16 +306,22 @@ export async function getProjectSummaryInWorkspace(
   if (!project) throw new Error('Project not found')
 
   const projectPath = join(workspacePath, 'projects', project.slug)
+  assertPathInside(join(workspacePath, 'projects'), projectPath)
   const folders = await Promise.all(
-    (Object.entries(projectFolderMap) as Array<[FolderKey, (typeof projectFolderMap)[FolderKey]]>).map(
-      async ([key, folder]) => ({
+    (
+      Object.entries(projectFolderMap) as Array<[FolderKey, (typeof projectFolderMap)[FolderKey]]>
+    ).map(async ([key, folder]) => {
+      const folderPath = join(projectPath, folder.path)
+      assertPathInside(projectPath, folderPath)
+
+      return {
         key,
         label: folder.label,
         path: folder.path,
         description: folder.description,
-        fileCount: await countFilesInDirectory(join(projectPath, folder.path))
-      })
-    )
+        fileCount: await countFilesInDirectory(folderPath)
+      }
+    })
   )
 
   return {
@@ -298,6 +340,10 @@ export async function openProjectSubfolderInSystem(
   const folder = summary.folders.find((entry) => entry.key === folderKey)
   if (!folder) throw new Error('Folder not found')
 
+  const folderPath = join(summary.fullPath, folder.path)
+  assertPathInside(summary.fullPath, folderPath)
+
   const { shell } = await import('electron')
-  await shell.openPath(join(summary.fullPath, folder.path))
+  const errorMessage = await shell.openPath(folderPath)
+  if (errorMessage) throw new Error(errorMessage)
 }

@@ -14,6 +14,36 @@ function saveJob(job: Job): Job {
   return job
 }
 
+export function createJob(input: { type: string; title: string; message?: string }): Job {
+  const createdAt = now()
+  return saveJob({
+    id: randomUUID(),
+    type: input.type,
+    title: input.title,
+    status: 'pending',
+    progress: 0,
+    message: input.message ?? 'Queued',
+    createdAt,
+    updatedAt: createdAt
+  })
+}
+
+export function updateJob(
+  jobId: string,
+  input: Partial<Pick<Job, 'status' | 'progress' | 'message'>>
+): Job | null {
+  const current = jobs.get(jobId)
+  if (!current) return null
+
+  return saveJob({
+    ...current,
+    ...input,
+    progress:
+      input.progress === undefined ? current.progress : Math.max(0, Math.min(100, input.progress)),
+    updatedAt: now()
+  })
+}
+
 export function listJobs(): Job[] {
   return Array.from(jobs.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }

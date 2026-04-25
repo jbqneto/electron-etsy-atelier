@@ -12,7 +12,14 @@ export const projectSummarySchema = z.object({
   fullPath: z.string().min(1),
   folders: z.array(
     z.object({
-      key: z.enum(['sourceArtworks', 'upscaled', 'printableRatios', 'mockups', 'pdf', 'exportPackage']),
+      key: z.enum([
+        'sourceArtworks',
+        'upscaled',
+        'printableRatios',
+        'mockups',
+        'pdf',
+        'exportPackage'
+      ]),
       label: z.string().min(1),
       path: z.string().min(1),
       description: z.string().min(1),
