@@ -1,0 +1,34 @@
+@import 'tailwindcss';
+
+:root {
+  color: #e5e7eb;
+  background: #18181b;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: #18181b;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+}
