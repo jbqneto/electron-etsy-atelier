@@ -115,7 +115,7 @@ Then the app imports generated files into the project.
 MVP behavior:
 
 - import images from file dialog or drag-and-drop;
-- copy files into the project `source-artwork/` folder;
+- copy files into the project `source-artworks/` folder;
 - create `ProjectAsset` metadata records;
 - show thumbnails in project view.
 

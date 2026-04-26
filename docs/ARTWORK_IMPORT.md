@@ -16,7 +16,7 @@ Artwork import copies supported image files into a project source-artwork folder
 Imported artwork metadata is stored in:
 
 ```txt
-projects/<project-slug>/01-source-artworks/.atelier-artworks.json
+projects/<project-slug>/source-artworks/.atelier-artworks.json
 ```
 
 Each item stores:
@@ -32,7 +32,7 @@ Each item stores:
 The image file itself is copied into:
 
 ```txt
-projects/<project-slug>/01-source-artworks/<filename>
+projects/<project-slug>/source-artworks/<filename>
 ```
 
 If a filename already exists, the importer appends `-2`, `-3`, and so on before the extension. Original extensions are preserved.

@@ -33,10 +33,10 @@ projects/
     prompts/
       prompts.json
       prompt-notes.md
-    source-artwork/
+    source-artworks/
       001-original.png
       002-original.png
-    upscaled-artwork/
+    upscaled/
       001-upscaled.png
       002-upscaled.png
     printable-variants/

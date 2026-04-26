@@ -2,13 +2,17 @@ import { z } from 'zod'
 
 export const projectStatusSchema = z.enum(['draft', 'active', 'archived'])
 
+function canonicalProjectFolderSchema(canonical: string, legacy: string): z.ZodType<string> {
+  return z.union([z.literal(canonical), z.literal(legacy)]).transform(() => canonical)
+}
+
 export const projectPathsSchema = z.object({
-  sourceArtworks: z.literal('01-source-artworks'),
-  upscaled: z.literal('02-upscaled'),
-  printableRatios: z.literal('03-printable-ratios'),
-  mockups: z.literal('04-mockups'),
-  pdf: z.literal('05-pdf'),
-  exportPackage: z.literal('06-export-package')
+  sourceArtworks: canonicalProjectFolderSchema('source-artworks', '01-source-artworks'),
+  upscaled: canonicalProjectFolderSchema('upscaled', '02-upscaled'),
+  printableRatios: canonicalProjectFolderSchema('printable-ratios', '03-printable-ratios'),
+  mockups: canonicalProjectFolderSchema('mockups', '04-mockups'),
+  pdf: canonicalProjectFolderSchema('pdf', '05-pdf'),
+  exportPackage: canonicalProjectFolderSchema('export-package', '06-export-package')
 })
 
 export const projectSchema = z.object({

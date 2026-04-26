@@ -1,14 +1,14 @@
-import { dialog, ipcMain } from 'electron'
+import { ipcMain } from 'electron'
 
 import { createProjectInputSchema } from '../../shared/schemas/project'
 import type { Result } from '../../shared/types/ipc'
 import type { Project } from '../../shared/types/project'
 import type { WorkspaceState } from '../../shared/types/workspace-state'
+import { getConfiguredWorkspacePath } from '../services/appConfigService'
 import {
   createProjectInWorkspace,
   getCurrentWorkspace,
   getCurrentWorkspacePath,
-  initializeWorkspaceAtPath,
   listProjectsInWorkspace
 } from '../services/workspaceService'
 
@@ -25,27 +25,10 @@ async function resolveWorkspacePath(): Promise<string | null> {
 }
 
 export function registerWorkspaceIpc(): void {
-  ipcMain.handle('workspace:selectWorkspace', async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory', 'createDirectory']
-    })
-
-    if (result.canceled || result.filePaths.length === 0) {
-      return fail<WorkspaceState>('Workspace selection was canceled')
-    }
-
-    try {
-      return ok(await initializeWorkspaceAtPath(result.filePaths[0]))
-    } catch (error) {
-      return fail<WorkspaceState>(
-        error instanceof Error ? error.message : 'Failed to initialize workspace'
-      )
-    }
-  })
-
   ipcMain.handle('workspace:getCurrentWorkspace', async () => {
     try {
-      return ok(await getCurrentWorkspace())
+      const workspaceState = await getCurrentWorkspace()
+      return ok(workspaceState)
     } catch (error) {
       return fail<WorkspaceState | null>(
         error instanceof Error ? error.message : 'Failed to load workspace'
@@ -53,16 +36,12 @@ export function registerWorkspaceIpc(): void {
     }
   })
 
-  ipcMain.handle('workspace:initializeWorkspace', async (_event, workspacePath: unknown) => {
-    if (typeof workspacePath !== 'string' || !workspacePath.trim()) {
-      return fail<WorkspaceState>('Workspace path is required')
-    }
-
+  ipcMain.handle('workspace:getConfiguredWorkspacePath', async () => {
     try {
-      return ok(await initializeWorkspaceAtPath(workspacePath))
+      return ok(getConfiguredWorkspacePath())
     } catch (error) {
-      return fail<WorkspaceState>(
-        error instanceof Error ? error.message : 'Failed to initialize workspace'
+      return fail<string>(
+        error instanceof Error ? error.message : 'Failed to load configured workspace path'
       )
     }
   })

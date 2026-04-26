@@ -32,13 +32,7 @@ Use Zod for runtime validation.
 
 ## Task 3 - Workspace selection
 
-Implement:
-
-- native folder picker;
-- save current workspace in settings;
-- create `.atelier/` folder;
-- initialize SQLite database;
-- expose workspace status in UI.
+Now the workspace is pre-defined on the config file
 
 ## Task 4 - SQLite migrations
 
@@ -63,7 +57,7 @@ Implement:
 Implement:
 
 - import source artwork from native dialog;
-- copy files into `source-artwork/`;
+- copy files into `source-artworks/`;
 - read image metadata with Sharp;
 - generate thumbnail;
 - create `project_assets` row;

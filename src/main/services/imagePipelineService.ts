@@ -1,8 +1,11 @@
 import { randomUUID } from 'crypto'
 import { access, mkdir, stat } from 'fs/promises'
-import { basename, extname, isAbsolute, join, relative, resolve } from 'path'
+import { basename, extname, join, relative } from 'path'
 import sharp from 'sharp'
 
+import { tryGetDatabaseConnection } from '../database/DatabaseService'
+import { replaceImageCards, listImageCards as listImageCardsFromDatabase } from '../database/repositories/ImageCardRepository'
+import { replaceRatioOutputs } from '../database/repositories/RatioOutputRepository'
 import {
   generatePrintableRatiosOptionsSchema,
   imageCardsMetadataSchema,
@@ -32,21 +35,12 @@ import type {
   UpdateImageCardInput
 } from '../../shared/image-pipeline'
 import type { ArtworkItem, SharpValidationResult } from '../../shared/types/ipc'
-import { readJsonFile, writeJsonFile } from './jsonStore'
+import { projectFolderPaths } from '../constants/projectFolders'
+import { readJsonFile, safeJoinWorkspacePath, writeJsonFileAtomic } from './jsonStore'
 import { listArtworkFilesInProject } from './artworkService'
 import { listProjectsInWorkspace } from './workspaceService'
 import { createJob, updateJob } from './jobService'
 import { defaultImagePipelineSettings } from '../../shared/image-pipeline/settings'
-
-function assertPathInside(parentPath: string, childPath: string): void {
-  const resolvedParent = resolve(parentPath)
-  const resolvedChild = resolve(childPath)
-  const relation = relative(resolvedParent, resolvedChild)
-
-  if (relation === '' || (!relation.startsWith('..') && !isAbsolute(relation))) return
-
-  throw new Error('Resolved image pipeline path is outside the project')
-}
 
 function imageCardsPath(projectPath: string): string {
   return join(projectPath, '.atelier', 'image-cards.json')
@@ -57,18 +51,19 @@ const ratioSelectionSettings: Partial<RatioPresetSettings> = {
 }
 
 function printableRatiosPath(projectPath: string): string {
-  return join(projectPath, '03-printable-ratios')
+  return join(projectPath, projectFolderPaths.printableRatios)
 }
 
 async function loadImageCards(projectPath: string): Promise<ImageCardsMetadata> {
   const fallback: ImageCardsMetadata = { items: [] }
-  const raw = await readJsonFile(imageCardsPath(projectPath), fallback)
+  const raw = await readJsonFile(imageCardsPath(projectPath), fallback, { onCorrupted: 'throw' })
   const parsed = imageCardsMetadataSchema.safeParse(raw)
-  return parsed.success ? parsed.data : fallback
+  if (parsed.success) return parsed.data
+  throw new Error('Image card metadata is invalid')
 }
 
 async function saveImageCards(projectPath: string, metadata: ImageCardsMetadata): Promise<void> {
-  await writeJsonFile(imageCardsPath(projectPath), imageCardsMetadataSchema.parse(metadata))
+  await writeJsonFileAtomic(imageCardsPath(projectPath), imageCardsMetadataSchema.parse(metadata))
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -103,9 +98,7 @@ async function resolveProjectPath(workspacePath: string, projectId: string): Pro
   )
   if (!project) throw new Error('Project not found')
 
-  const projectPath = join(workspacePath, 'projects', project.slug)
-  assertPathInside(join(workspacePath, 'projects'), projectPath)
-  return projectPath
+  return safeJoinWorkspacePath(workspacePath, 'projects', project.slug)
 }
 
 export async function validateSharp(): Promise<SharpValidationResult> {
@@ -284,7 +277,28 @@ export async function listImageCardsInProject(
   projectId: string
 ): Promise<ImageCard[]> {
   const projectPath = await resolveProjectPath(workspacePath, projectId)
-  return (await loadImageCards(projectPath)).items
+  const metadata = await loadImageCards(projectPath)
+  const merged = new Map<string, ImageCard>()
+
+  const database = tryGetDatabaseConnection()
+  if (database) {
+    try {
+      const rows = listImageCardsFromDatabase(database, projectId)
+      for (const card of rows) {
+        merged.set(card.id, card)
+      }
+    } catch {
+      // Fall back to the JSON snapshot below.
+    }
+  }
+
+  for (const card of metadata.items) {
+    merged.set(card.id, card)
+  }
+
+  return Array.from(merged.values()).sort((left, right) =>
+    right.metadataScannedAt.localeCompare(left.metadataScannedAt)
+  )
 }
 
 export async function scanSourceArtworksInProject(
@@ -301,8 +315,7 @@ export async function scanSourceArtworksInProject(
   const nextCards: ImageCard[] = []
 
   for (const artwork of artworks) {
-    const filePath = join(projectPath, artwork.relativePath)
-    assertPathInside(projectPath, filePath)
+    const filePath = safeJoinWorkspacePath(projectPath, artwork.relativePath)
 
     const [metadata, stats] = await Promise.all([sharp(filePath).metadata(), stat(filePath)])
     if (!metadata.width || !metadata.height) {
@@ -324,6 +337,14 @@ export async function scanSourceArtworksInProject(
   }
 
   await saveImageCards(projectPath, { items: nextCards })
+  const database = tryGetDatabaseConnection()
+  if (database) {
+    try {
+      replaceImageCards(database, projectId, { items: nextCards })
+    } catch {
+      // Keep the JSON snapshot as the durable fallback if SQLite write-through fails.
+    }
+  }
   return nextCards
 }
 
@@ -354,6 +375,14 @@ export async function updateImageCardInProject(
 
   metadata.items[cardIndex] = nextCard
   await saveImageCards(projectPath, metadata)
+  const database = tryGetDatabaseConnection()
+  if (database) {
+    try {
+      replaceImageCards(database, projectId, metadata)
+    } catch {
+      // Keep the JSON snapshot as the durable fallback if SQLite write-through fails.
+    }
+  }
 
   return nextCard
 }
@@ -406,8 +435,7 @@ export async function generatePrintableRatios(
     const ratioJobs = getSelectedRatioJobs(card, { exportLargestOnly })
     if (ratioJobs.length === 0) continue
 
-    const sourcePath = join(projectPath, card.relativePath)
-    assertPathInside(projectPath, sourcePath)
+    const sourcePath = safeJoinWorkspacePath(projectPath, card.relativePath)
     const nextOutputs: GeneratedPipelineOutput[] = []
 
     for (const ratioJob of ratioJobs) {
@@ -426,8 +454,11 @@ export async function generatePrintableRatios(
         continue
       }
 
-      const outputFolderPath = join(printableRoot, card.baseName, ratioJob.preset.folderName)
-      assertPathInside(printableRoot, outputFolderPath)
+      const outputFolderPath = safeJoinWorkspacePath(
+        printableRoot,
+        card.baseName,
+        ratioJob.preset.folderName
+      )
       await mkdir(outputFolderPath, { recursive: true })
 
       for (const size of ratioJob.sizes) {
@@ -443,8 +474,7 @@ export async function generatePrintableRatios(
             filenamePattern: defaultImagePipelineSettings.filenamePattern
           })
           const filename = await getAvailableOutputFilename(outputFolderPath, baseFilename)
-          const outputPath = join(outputFolderPath, filename)
-          assertPathInside(printableRoot, outputPath)
+          const outputPath = safeJoinWorkspacePath(outputFolderPath, filename)
 
           await sharp(sourcePath)
             .extract(toSharpExtractRegion(crop, card))
@@ -481,9 +511,25 @@ export async function generatePrintableRatios(
     }
 
     card.outputs = nextOutputs
+    const database = tryGetDatabaseConnection()
+    if (database && nextOutputs.length > 0) {
+      try {
+        replaceRatioOutputs(database, projectId, card.id, card.artworkId, nextOutputs)
+      } catch {
+        // Ratio output rows are auxiliary metadata; keep the JSON snapshot if write-through fails.
+      }
+    }
   }
 
   await saveImageCards(projectPath, metadata)
+  const database = tryGetDatabaseConnection()
+  if (database) {
+    try {
+      replaceImageCards(database, projectId, metadata)
+    } catch {
+      // Keep the JSON snapshot as the durable fallback if SQLite write-through fails.
+    }
+  }
   updateJob(job.id, {
     status: failedCount > 0 ? 'failed' : 'completed',
     progress: 100,

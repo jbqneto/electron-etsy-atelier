@@ -14,6 +14,7 @@ import type {
 import type { AppSettings } from './settings'
 import type { Project } from './project'
 import type { WorkspaceState } from './workspace-state'
+import type { DatabaseMigrationPreview, DatabaseMigrationResult, DatabaseStatus } from './database'
 
 export type AppPingResponse = {
   ok: true
@@ -30,9 +31,8 @@ export type AtelierApi = {
     ping: () => Promise<AppPingResponse>
   }
   workspace: {
-    selectWorkspace: () => Promise<Result<WorkspaceState>>
     getCurrentWorkspace: () => Promise<Result<WorkspaceState | null>>
-    initializeWorkspace: (workspacePath: string) => Promise<Result<WorkspaceState>>
+    getConfiguredWorkspacePath: () => Promise<Result<string>>
   }
   projects: {
     createProject: (input: CreateProjectInput) => Promise<Result<Project>>
@@ -52,6 +52,11 @@ export type AtelierApi = {
     listJobs: () => Promise<Result<Job[]>>
     clearCompletedJobs: () => Promise<Result<null>>
     createDemoJob: () => Promise<Result<Job>>
+  }
+  database: {
+    getStatus: () => Promise<Result<DatabaseStatus>>
+    getMigrationPreview: () => Promise<Result<DatabaseMigrationPreview>>
+    migrateJsonToSqlite: () => Promise<Result<DatabaseMigrationResult>>
   }
   imagePipeline: {
     validateSharp: () => Promise<Result<SharpValidationResult>>

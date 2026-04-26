@@ -1,5 +1,13 @@
 # Roadmap
 
+## Current technical priority
+
+1. Harden JSON-to-SQLite migration and repository coverage for the current features.
+2. Keep the existing JSON snapshots as portable backups.
+3. Add the Mockup Template Builder on top of the stabilized database layer.
+4. Add the Mockup Composer after templates are stable.
+5. Add persistent jobs, PDF export and final package building later.
+
 ## Version 0.1 - Project foundation
 
 Goal: create a secure Electron shell with a VS Code-like layout.
@@ -32,10 +40,11 @@ Goal: create and open local Etsy projects.
 
 Deliverables:
 
-- workspace selection dialog;
+- configured workspace initialization;
 - current workspace persistence;
 - SQLite setup;
 - initial migrations;
+- database status UI;
 - create project;
 - list projects;
 - project folder structure generation;
@@ -57,7 +66,7 @@ Deliverables:
 
 - import images from file dialog;
 - drag-and-drop import if simple;
-- copy image files into `source-artwork/`;
+- copy image files into `source-artworks/`;
 - create project asset records;
 - generate thumbnails;
 - asset grid;

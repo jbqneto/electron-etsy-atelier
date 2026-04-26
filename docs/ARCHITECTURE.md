@@ -42,6 +42,7 @@ Renderer -> Preload bridge -> IPC -> Main process services -> Filesystem / OS
 - owns OS file manager actions
 - owns app settings JSON
 - owns workspace/project/artwork/job services
+- owns SQLite database access and migrations
 - opens native dialogs for workspace and artwork file selection
 
 ## Current module layout
@@ -49,6 +50,7 @@ Renderer -> Preload bridge -> IPC -> Main process services -> Filesystem / OS
 ```txt
 src/
   main/
+    database/
     ipc/
     services/
   preload/
@@ -76,21 +78,29 @@ Handlers return `Result<T>` and validate incoming payloads with Zod or equivalen
 
 Current exposed domains:
 
-- workspace selection and restoration
+- workspace initialization and restoration from the configured path
 - project creation/listing/detail/folder opening
 - source artwork selection/import/listing/preview/reveal
 - in-memory jobs listing/demo/clear-completed
+- database status
+
+## Current storage split
+
+- JSON snapshots still exist for workspace metadata, project snapshots, source artworks and image cards.
+- SQLite now lives in the workspace `.atelier/atelier.db` and acts as the query/index layer for current features.
+- The current jobs system remains in-memory.
 
 ## Sprint 1 status
 
 ### Done
 
 - Secure Electron shell
-- Workspace selection and persistence
+- Workspace initialization and persistence
 - Project creation and listing
 - Project dashboard
 - Artwork import and source gallery
 - In-memory jobs panel
+- SQLite foundation and database status
 - Documentation cleanup
 
 ### Known limitations
@@ -98,7 +108,8 @@ Current exposed domains:
 - Settings and workspace state are JSON-based only
 - Jobs are not persisted
 - Previews use data URLs
-- No image processing or database layer yet
+- Database sync and migration tooling still need hardening
+- Mockup, PDF and export modules are not implemented yet
 
 ### Next sprint proposal
 

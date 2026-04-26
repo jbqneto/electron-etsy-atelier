@@ -9,10 +9,19 @@ function ok<T>(data: T): Result<T> {
 }
 
 export function registerJobsIpc(): void {
-  ipcMain.handle('jobs:listJobs', () => ok(listJobs().map((job) => jobSchema.parse(job))))
+  ipcMain.handle('jobs:listJobs', () => {
+    const jobs = listJobs().map((job) => jobSchema.parse(job))
+    console.log('[jobs] listJobs returned', jobs.length, 'items')
+    return ok(jobs)
+  })
   ipcMain.handle('jobs:clearCompletedJobs', () => {
+    console.log('[jobs] clearCompletedJobs called')
     clearCompletedJobs()
     return ok(null)
   })
-  ipcMain.handle('jobs:createDemoJob', () => ok(jobSchema.parse(createDemoJob())))
+  ipcMain.handle('jobs:createDemoJob', () => {
+    const job = jobSchema.parse(createDemoJob())
+    console.log('[jobs] createDemoJob created', job.id)
+    return ok(job)
+  })
 }

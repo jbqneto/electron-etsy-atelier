@@ -2,18 +2,18 @@
 
 ## Immediate focus
 
-1. Optimize artwork preview handling for larger image batches.
-2. Add thumbnail generation for source artworks.
+1. Harden the JSON-to-SQLite migration workflow and expand repository coverage.
+2. Add unit tests for workspace guard, database status, filename conflict handling and project folder summaries.
 3. Add a persistent job queue.
-4. Add unit tests for workspace guard, filename conflict handling and project folder summaries.
 
 ## Next sprint proposal
 
-- Image pipeline foundation:
-  - ratio generation
+- SQLite stabilization and image pipeline hardening:
+  - migration tooling
+  - repository coverage
   - preview optimization
+  - thumbnail generation
   - job persistence
-  - project asset filtering
 
 ## Sprint 2 readiness
 

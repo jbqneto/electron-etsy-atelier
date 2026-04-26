@@ -30,7 +30,7 @@ Generated source artwork
 Imported images go to:
 
 ```txt
-source-artwork/
+source-artworks/
 ```
 
 The app must detect:
@@ -60,7 +60,7 @@ Do not block the UI.
 Output goes to:
 
 ```txt
-upscaled-artwork/
+upscaled/
 ```
 
 ## Printable ratios
@@ -82,7 +82,7 @@ the shared auto-crop algorithm, then uses Sharp to extract, resize and write JPG
 Output is written under:
 
 ```txt
-projects/<project-slug>/03-printable-ratios/
+projects/<project-slug>/printable-ratios/
   <artworkBaseName>/
     <ratioFolderName>/
       <filename>.jpg

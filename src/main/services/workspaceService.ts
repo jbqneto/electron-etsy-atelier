@@ -1,71 +1,57 @@
 import { randomUUID } from 'crypto'
-import { mkdir, readdir, readFile } from 'fs/promises'
+import { mkdir, readdir, readFile, rename } from 'fs/promises'
 import { existsSync } from 'fs'
-import { isAbsolute, join, relative, resolve } from 'path'
+import { join, resolve } from 'path'
 
+import { configureDatabaseForWorkspace, tryGetDatabaseConnection } from '../database/DatabaseService'
+import { listProjects as listProjectsFromDatabase, upsertProject } from '../database/repositories/ProjectRepository'
+import { projectFolderPaths, legacyProjectFolderPaths } from '../constants/projectFolders'
 import { projectSchema } from '../../shared/schemas/project'
 import { workspaceSchema } from '../../shared/schemas/workspace'
 import type { FolderKey, ProjectSummary } from '../../shared/types/ipc'
 import type { Project } from '../../shared/types/project'
 import type { Workspace } from '../../shared/types/workspace'
 import type { WorkspaceState } from '../../shared/types/workspace-state'
-import { writeJsonFile } from './jsonStore'
+import { getConfiguredWorkspacePath } from './appConfigService'
+import { safeJoinWorkspacePath, writeJsonFileAtomic } from './jsonStore'
 import { appSettingsService } from './appSettingsService'
 
 const workspaceFolders = ['projects', 'mockup-templates', 'assets', 'exports'] as const
-const projectFolders = [
-  '01-source-artworks',
-  '02-upscaled',
-  '03-printable-ratios',
-  '04-mockups',
-  '05-pdf',
-  '06-export-package'
-] as const
 
 const projectFolderMap: Record<FolderKey, { path: string; label: string; description: string }> = {
   sourceArtworks: {
-    path: '01-source-artworks',
+    path: projectFolderPaths.sourceArtworks,
     label: 'Source Artworks',
     description: 'Imported original artwork files.'
   },
   upscaled: {
-    path: '02-upscaled',
+    path: projectFolderPaths.upscaled,
     label: 'Upscaled Images',
     description: 'Future upscaled artwork outputs.'
   },
   printableRatios: {
-    path: '03-printable-ratios',
+    path: projectFolderPaths.printableRatios,
     label: 'Printable Ratios',
     description: 'Prepared print-ready ratio exports.'
   },
   mockups: {
-    path: '04-mockups',
+    path: projectFolderPaths.mockups,
     label: 'Mockups',
     description: 'Listing mockups and template previews.'
   },
   pdf: {
-    path: '05-pdf',
+    path: projectFolderPaths.pdf,
     label: 'Buyer PDF',
     description: 'Buyer instruction document outputs.'
   },
   exportPackage: {
-    path: '06-export-package',
+    path: projectFolderPaths.exportPackage,
     label: 'Export Package',
     description: 'Final delivery package files.'
   }
 }
 
 let currentWorkspaceRecord: WorkspaceState | null = null
-
-function assertPathInside(parentPath: string, childPath: string): void {
-  const resolvedParent = resolve(parentPath)
-  const resolvedChild = resolve(childPath)
-  const relation = relative(resolvedParent, resolvedChild)
-
-  if (relation === '' || (!relation.startsWith('..') && !isAbsolute(relation))) return
-
-  throw new Error('Resolved folder is outside the workspace')
-}
 
 function workspaceFilePath(workspacePath: string): string {
   return join(workspacePath, '.atelier', 'workspace.json')
@@ -126,11 +112,29 @@ export async function initializeWorkspaceAtPath(workspacePath: string): Promise<
     record = createWorkspaceRecord(resolvedPath)
   }
 
-  await writeJsonFile(configPath, workspaceSchema.parse(record.workspace))
-  await writeJsonFile(legacyMetaPath, workspaceSchema.parse(record.workspace))
+  await writeJsonFileAtomic(configPath, workspaceSchema.parse(record.workspace))
+  await writeJsonFileAtomic(legacyMetaPath, workspaceSchema.parse(record.workspace))
   await appSettingsService.writeSettings({ lastWorkspacePath: resolvedPath })
+  configureDatabaseForWorkspace(resolvedPath)
   currentWorkspaceRecord = record
   return record
+}
+
+async function loadConfiguredWorkspace(): Promise<WorkspaceState | null> {
+  const configuredWorkspacePath = getConfiguredWorkspacePath()
+  if (!configuredWorkspacePath) return null
+
+  const workspace = await readWorkspace(configuredWorkspacePath)
+  if (workspace) {
+    currentWorkspaceRecord = {
+      path: resolve(configuredWorkspacePath),
+      workspace
+    }
+    configureDatabaseForWorkspace(configuredWorkspacePath)
+    return currentWorkspaceRecord
+  }
+
+  return initializeWorkspaceAtPath(configuredWorkspacePath)
 }
 
 export async function getCurrentWorkspace(): Promise<WorkspaceState | null> {
@@ -139,22 +143,28 @@ export async function getCurrentWorkspace(): Promise<WorkspaceState | null> {
   }
 
   const { settings } = await appSettingsService.readSettings()
-  if (!settings.lastWorkspacePath) return null
-  const workspace = await readWorkspace(settings.lastWorkspacePath)
-  if (!workspace) return null
-
-  currentWorkspaceRecord = {
-    path: resolve(settings.lastWorkspacePath),
-    workspace
+  if (settings.lastWorkspacePath) {
+    const workspace = await readWorkspace(settings.lastWorkspacePath)
+    if (workspace) {
+      currentWorkspaceRecord = {
+        path: resolve(settings.lastWorkspacePath),
+        workspace
+      }
+      configureDatabaseForWorkspace(settings.lastWorkspacePath)
+      return currentWorkspaceRecord
+    }
   }
-  return currentWorkspaceRecord
+
+  return loadConfiguredWorkspace()
 }
 
 export async function getCurrentWorkspacePath(): Promise<string | null> {
   if (currentWorkspaceRecord) return currentWorkspaceRecord.path
 
   const { settings } = await appSettingsService.readSettings()
-  return settings.lastWorkspacePath ? resolve(settings.lastWorkspacePath) : null
+  if (settings.lastWorkspacePath) return resolve(settings.lastWorkspacePath)
+
+  return getConfiguredWorkspacePath()
 }
 
 export async function readWorkspace(workspacePath: string): Promise<Workspace | null> {
@@ -200,17 +210,73 @@ async function ensureUniqueSlug(projectsDir: string, baseSlug: string): Promise<
 }
 
 async function ensureProjectStructure(projectDir: string): Promise<void> {
-  for (const folder of projectFolders) {
+  for (const folder of Object.values(projectFolderPaths)) {
     await mkdir(join(projectDir, folder), { recursive: true })
   }
 }
 
+async function migrateProjectFolders(projectDir: string, project: Project): Promise<Project> {
+  const nextPaths: Project['paths'] = { ...project.paths }
+  let changed = false
+
+  for (const [key, folderPath] of Object.entries(projectFolderPaths) as Array<
+    [FolderKey, (typeof projectFolderPaths)[FolderKey]]
+  >) {
+    const desiredFolderPath = join(projectDir, folderPath)
+    const legacyFolderPath = join(projectDir, legacyProjectFolderPaths[key])
+
+    if (!existsSync(desiredFolderPath) && existsSync(legacyFolderPath)) {
+      await rename(legacyFolderPath, desiredFolderPath)
+    }
+
+    if (!existsSync(desiredFolderPath)) {
+      await mkdir(desiredFolderPath, { recursive: true })
+    }
+
+    if (nextPaths[key] !== folderPath) {
+      switch (key) {
+        case 'sourceArtworks':
+          nextPaths.sourceArtworks = projectFolderPaths.sourceArtworks
+          break
+        case 'upscaled':
+          nextPaths.upscaled = projectFolderPaths.upscaled
+          break
+        case 'printableRatios':
+          nextPaths.printableRatios = projectFolderPaths.printableRatios
+          break
+        case 'mockups':
+          nextPaths.mockups = projectFolderPaths.mockups
+          break
+        case 'pdf':
+          nextPaths.pdf = projectFolderPaths.pdf
+          break
+        case 'exportPackage':
+          nextPaths.exportPackage = projectFolderPaths.exportPackage
+          break
+      }
+      changed = true
+    }
+  }
+
+  if (changed) {
+    const updatedProject: Project = {
+      ...project,
+      updatedAt: new Date().toISOString(),
+      paths: nextPaths
+    }
+    await writeJsonFileAtomic(join(projectDir, 'project.json'), projectSchema.parse(updatedProject))
+    return updatedProject
+  }
+
+  return project
+}
+
 export async function listProjectsInWorkspace(workspacePath: string): Promise<Project[]> {
   const projectsDir = join(workspacePath, 'projects')
+  let jsonProjects: Project[] = []
 
   try {
     const entries = await readdir(projectsDir, { withFileTypes: true })
-    const projects: Project[] = []
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
@@ -218,16 +284,41 @@ export async function listProjectsInWorkspace(workspacePath: string): Promise<Pr
       const projectJsonPath = join(projectsDir, entry.name, 'project.json')
       try {
         const parsed = projectSchema.parse(JSON.parse(await readFile(projectJsonPath, 'utf-8')))
-        projects.push(parsed)
+        jsonProjects.push(await migrateProjectFolders(join(projectsDir, entry.name), parsed))
       } catch {
         continue
       }
     }
 
-    return projects.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
   } catch {
-    return []
+    jsonProjects = []
   }
+
+  const database = tryGetDatabaseConnection()
+  if (database) {
+    try {
+      const dbProjects = listProjectsFromDatabase(database)
+      if (dbProjects.length > 0) {
+        const merged = new Map<string, Project>()
+        for (const project of jsonProjects) {
+          merged.set(project.id, project)
+        }
+        for (const project of dbProjects) {
+          merged.set(project.id, {
+            ...merged.get(project.id),
+            ...project
+          })
+        }
+        return Array.from(merged.values()).sort((left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt)
+        )
+      }
+    } catch {
+      // Fall back to the JSON snapshot below.
+    }
+  }
+
+  return jsonProjects.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 }
 
 export async function createProjectInWorkspace(
@@ -259,16 +350,24 @@ export async function createProjectInWorkspace(
     createdAt: now,
     updatedAt: now,
     paths: {
-      sourceArtworks: '01-source-artworks',
-      upscaled: '02-upscaled',
-      printableRatios: '03-printable-ratios',
-      mockups: '04-mockups',
-      pdf: '05-pdf',
-      exportPackage: '06-export-package'
+      sourceArtworks: projectFolderPaths.sourceArtworks,
+      upscaled: projectFolderPaths.upscaled,
+      printableRatios: projectFolderPaths.printableRatios,
+      mockups: projectFolderPaths.mockups,
+      pdf: projectFolderPaths.pdf,
+      exportPackage: projectFolderPaths.exportPackage
     }
   }
 
-  await writeJsonFile(join(projectDir, 'project.json'), projectSchema.parse(project))
+  await writeJsonFileAtomic(join(projectDir, 'project.json'), projectSchema.parse(project))
+  const database = tryGetDatabaseConnection()
+  if (database) {
+    try {
+      upsertProject(database, project)
+    } catch {
+      // Keep the JSON snapshot as the durable fallback if SQLite is temporarily unavailable.
+    }
+  }
   return project
 }
 
@@ -280,8 +379,7 @@ export async function openProjectFolderInSystem(
   const project = projects.find((entry) => entry.id === projectId)
   if (!project) throw new Error('Project not found')
 
-  const projectPath = join(workspacePath, 'projects', project.slug)
-  assertPathInside(join(workspacePath, 'projects'), projectPath)
+  const projectPath = safeJoinWorkspacePath(workspacePath, 'projects', project.slug)
 
   const { shell } = await import('electron')
   const errorMessage = await shell.openPath(projectPath)
@@ -305,14 +403,12 @@ export async function getProjectSummaryInWorkspace(
   const project = projects.find((entry) => entry.id === projectId)
   if (!project) throw new Error('Project not found')
 
-  const projectPath = join(workspacePath, 'projects', project.slug)
-  assertPathInside(join(workspacePath, 'projects'), projectPath)
+  const projectPath = safeJoinWorkspacePath(workspacePath, 'projects', project.slug)
   const folders = await Promise.all(
     (
       Object.entries(projectFolderMap) as Array<[FolderKey, (typeof projectFolderMap)[FolderKey]]>
     ).map(async ([key, folder]) => {
-      const folderPath = join(projectPath, folder.path)
-      assertPathInside(projectPath, folderPath)
+      const folderPath = safeJoinWorkspacePath(projectPath, folder.path)
 
       return {
         key,
@@ -340,8 +436,7 @@ export async function openProjectSubfolderInSystem(
   const folder = summary.folders.find((entry) => entry.key === folderKey)
   if (!folder) throw new Error('Folder not found')
 
-  const folderPath = join(summary.fullPath, folder.path)
-  assertPathInside(summary.fullPath, folderPath)
+  const folderPath = safeJoinWorkspacePath(summary.fullPath, folder.path)
 
   const { shell } = await import('electron')
   const errorMessage = await shell.openPath(folderPath)

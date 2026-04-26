@@ -30,7 +30,7 @@ npm run build
 
 ## Workspace concept
 
-A workspace is a local folder chosen by the user. The app initializes it with:
+A workspace is a local folder configured by the app. The app initializes it with:
 
 ```txt
 atelier-workspace/
@@ -43,7 +43,7 @@ atelier-workspace/
   exports/
 ```
 
-The selected workspace path is persisted in Electron `userData` as a JSON settings file so the app can restore the last workspace on startup. The workspace itself stores metadata in `atelier.config.json`.
+The configured workspace path is persisted in Electron `userData` as a JSON settings file so the app can restore the last workspace on startup. The workspace itself stores metadata in `atelier.config.json`.
 
 ## Project concept
 
@@ -67,7 +67,7 @@ Project slugs are generated from the project name and made unique automatically.
 
 - Secure Electron architecture with `contextIsolation: true` and `nodeIntegration: false`
 - Typed IPC bridge exposed through `window.atelier`
-- Workspace selection and initialization
+- Workspace initialization from the configured path
 - Workspace persistence in Electron userData JSON
 - Project creation, listing and folder opening
 - Project dashboard with workflow sections and source artwork gallery
@@ -75,13 +75,14 @@ Project slugs are generated from the project name and made unique automatically.
 - Artwork metadata stored in `.atelier-artworks.json`
 - Safe local previews served through main-process IPC as data URLs
 - In-memory jobs panel with demo progress jobs
+- SQLite foundation in the main process with per-workspace `.atelier/atelier.db`
+- Database status exposed in the sidebar
+- Image pipeline domain, image cards, ratio selection and printable ratio generation
 - VS Code-like dark shell with workspace and project explorer
 
 ## Not implemented yet
 
-- SQLite
 - image upscaling
-- ratio generation
 - mockup templates
 - mockup composer
 - buyer PDF generation
@@ -90,10 +91,10 @@ Project slugs are generated from the project name and made unique automatically.
 
 ## Next steps
 
-1. Add preview optimization and thumbnail generation.
-2. Add project rename/status editing.
-3. Add project asset filtering and richer previews.
-4. Add a persistent job queue and real processing pipeline.
+1. Harden the JSON-to-SQLite migration workflow and expand repository coverage.
+2. Add a persistent job queue and real processing pipeline.
+3. Add the Mockup Template Builder foundation.
+4. Add preview optimization and thumbnail generation.
 
 ## Development rules
 
@@ -112,13 +113,14 @@ Project slugs are generated from the project name and made unique automatically.
 - Project dashboard and source artwork gallery.
 - Artwork import and metadata storage.
 - Live in-memory jobs panel.
+- SQLite foundation and database status surface.
 
 ### Known limitations
 
 - Settings are JSON-only.
 - Jobs are in-memory only.
 - Previews use data URLs and are not optimized for large batches.
-- No SQLite, Sharp, Fabric.js, PDF, Drive, or Etsy integration yet.
+- No upscaler adapter, mockup composer, PDF, Drive, or Etsy integration yet.
 
 ### Next sprint proposal
 

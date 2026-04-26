@@ -9,6 +9,11 @@ import { workspaceStateSchema } from '../shared/schemas/workspace-state'
 import { artworkItemSchema } from '../shared/schemas/artwork'
 import { projectSummarySchema } from '../shared/schemas/project-summary'
 import { jobSchema } from '../shared/schemas/job'
+import { databaseStatusSchema } from '../shared/schemas/database'
+import {
+  databaseMigrationPreviewSchema,
+  databaseMigrationResultSchema
+} from '../shared/schemas/database-migration'
 import {
   generatePrintableRatiosResultSchema,
   imageCardSchema,
@@ -28,6 +33,11 @@ import type {
   Result,
   SharpValidationResult
 } from '../shared/types/ipc'
+import type {
+  DatabaseMigrationPreview,
+  DatabaseMigrationResult,
+  DatabaseStatus
+} from '../shared/types/database'
 import type { Project } from '../shared/types/project'
 import type { WorkspaceState } from '../shared/types/workspace-state'
 
@@ -36,18 +46,14 @@ const atelierApi: AtelierApi = {
     ping: async () => appPingResponseSchema.parse(await ipcRenderer.invoke('app:ping'))
   },
   workspace: {
-    selectWorkspace: async () =>
-      resultSchema(workspaceStateSchema).parse(
-        await ipcRenderer.invoke('workspace:selectWorkspace')
-      ) as Result<WorkspaceState>,
     getCurrentWorkspace: async () =>
       resultSchema(workspaceStateSchema.nullable()).parse(
         await ipcRenderer.invoke('workspace:getCurrentWorkspace')
       ) as Result<WorkspaceState | null>,
-    initializeWorkspace: async (workspacePath: string) =>
-      resultSchema(workspaceStateSchema).parse(
-        await ipcRenderer.invoke('workspace:initializeWorkspace', workspacePath)
-      ) as Result<WorkspaceState>
+    getConfiguredWorkspacePath: async () =>
+      resultSchema(z.string().min(1)).parse(
+        await ipcRenderer.invoke('workspace:getConfiguredWorkspacePath')
+      ) as Result<string>
   },
   projects: {
     createProject: async (input) =>
@@ -94,16 +100,38 @@ const atelierApi: AtelierApi = {
       ) as Result<null>
   },
   jobs: {
-    listJobs: async () =>
-      resultSchema(jobSchema.array()).parse(await ipcRenderer.invoke('jobs:listJobs')) as Result<
-        Job[]
-      >,
-    clearCompletedJobs: async () =>
-      resultSchema(z.null()).parse(
-        await ipcRenderer.invoke('jobs:clearCompletedJobs')
-      ) as Result<null>,
-    createDemoJob: async () =>
-      resultSchema(jobSchema).parse(await ipcRenderer.invoke('jobs:createDemoJob')) as Result<Job>
+    listJobs: async () => {
+      console.log('[preload] jobs:listJobs invoke')
+      const response = await ipcRenderer.invoke('jobs:listJobs')
+      console.log('[preload] jobs:listJobs response', response)
+      return resultSchema(jobSchema.array()).parse(response) as Result<Job[]>
+    },
+    clearCompletedJobs: async () => {
+      console.log('[preload] jobs:clearCompletedJobs invoke')
+      const response = await ipcRenderer.invoke('jobs:clearCompletedJobs')
+      console.log('[preload] jobs:clearCompletedJobs response', response)
+      return resultSchema(z.null()).parse(response) as Result<null>
+    },
+    createDemoJob: async () => {
+      console.log('[preload] jobs:createDemoJob invoke')
+      const response = await ipcRenderer.invoke('jobs:createDemoJob')
+      console.log('[preload] jobs:createDemoJob response', response)
+      return resultSchema(jobSchema).parse(response) as Result<Job>
+    }
+  },
+  database: {
+    getStatus: async () =>
+      resultSchema(databaseStatusSchema).parse(
+        await ipcRenderer.invoke('database:getStatus')
+      ) as Result<DatabaseStatus>,
+    getMigrationPreview: async () =>
+      resultSchema(databaseMigrationPreviewSchema).parse(
+        await ipcRenderer.invoke('database:getMigrationPreview')
+      ) as Result<DatabaseMigrationPreview>,
+    migrateJsonToSqlite: async () =>
+      resultSchema(databaseMigrationResultSchema).parse(
+        await ipcRenderer.invoke('database:migrateJsonToSqlite')
+      ) as Result<DatabaseMigrationResult>
   },
   imagePipeline: {
     validateSharp: async () =>

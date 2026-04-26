@@ -2,7 +2,8 @@
 
 ## Workspace structure
 
-A workspace is a user-selected local folder. When initialized, it is expanded into:
+A workspace is a local folder defined by the app configuration at `src/config/config.json`.
+When initialized, it is expanded into:
 
 ```txt
 atelier-workspace/
@@ -15,7 +16,7 @@ atelier-workspace/
   exports/
 ```
 
-The workspace metadata is stored in `atelier.config.json` at the workspace root. `.atelier/workspace.json` is still written as a legacy compatibility copy. App settings are stored separately in Electron `userData` as JSON and currently keep `lastWorkspacePath`.
+The workspace metadata is stored in `atelier.config.json` at the workspace root. `.atelier/workspace.json` is still written as a legacy compatibility copy. App settings are stored separately in Electron `userData` as JSON and currently keep `lastWorkspacePath` as a cache, but the configured workspace path is the source of truth.
 
 ## Workspace metadata
 
@@ -37,13 +38,15 @@ Each project lives under `projects/<project-slug>/`:
 projects/
   english-botanical-garden-collection/
     project.json
-    01-source-artworks/
-    02-upscaled/
-    03-printable-ratios/
-    04-mockups/
-    05-pdf/
-    06-export-package/
+    source-artworks/
+    upscaled/
+    printable-ratios/
+    mockups/
+    pdf/
+    export-package/
 ```
+
+Legacy projects created before the folder rename are auto-migrated to these folder names when they are loaded.
 
 ## Project metadata
 
@@ -58,12 +61,12 @@ projects/
   "createdAt": "ISO_DATE",
   "updatedAt": "ISO_DATE",
   "paths": {
-    "sourceArtworks": "01-source-artworks",
-    "upscaled": "02-upscaled",
-    "printableRatios": "03-printable-ratios",
-    "mockups": "04-mockups",
-    "pdf": "05-pdf",
-    "exportPackage": "06-export-package"
+    "sourceArtworks": "source-artworks",
+    "upscaled": "upscaled",
+    "printableRatios": "printable-ratios",
+    "mockups": "mockups",
+    "pdf": "pdf",
+    "exportPackage": "export-package"
   }
 }
 ```
@@ -73,9 +76,8 @@ projects/
 Renderer access goes through `window.atelier` only.
 
 ```ts
-window.atelier.workspace.selectWorkspace()
+window.atelier.workspace.getConfiguredWorkspacePath()
 window.atelier.workspace.getCurrentWorkspace()
-window.atelier.workspace.initializeWorkspace(path)
 window.atelier.projects.createProject(input)
 window.atelier.projects.listProjects()
 window.atelier.projects.openProjectFolder(projectId)
@@ -95,6 +97,7 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 - There is no SQLite index yet.
 - Project editing, rename and delete actions are not implemented.
 - Image processing and mockup tools are still placeholders.
+- Workspace selection is not interactive in the UI. Update `src/config/config.json` to change the default workspace.
 
 ## Next planned module
 

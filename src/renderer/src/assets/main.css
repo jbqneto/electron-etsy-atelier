@@ -1,15 +1,17 @@
 @import 'tailwindcss';
 
 :root {
-  color: #e5e7eb;
-  background: #18181b;
+  color: #e7e5df;
+  background: #111317;
   font-family:
+    'Segoe UI Variable Text',
+    'Segoe UI',
     ui-sans-serif,
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    'Segoe UI',
     sans-serif;
+  color-scheme: dark;
 }
 
 * {
@@ -23,12 +25,24 @@ body,
   margin: 0;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   overflow: hidden;
-  background: #18181b;
+  background:
+    radial-gradient(circle at top left, rgba(197, 157, 58, 0.12), transparent 32%),
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.04), transparent 28%),
+    linear-gradient(180deg, #16181c 0%, #101215 100%);
   user-select: none;
 }
 
 button {
   font: inherit;
+}
+
+::selection {
+  background: rgba(217, 176, 74, 0.3);
+  color: #fff8e5;
 }

@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import icon from '../../resources/icon.png?asset'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
+import { getCurrentWorkspace } from './services/workspaceService'
 
 function createWindow(): void {
   // Create the browser window.
@@ -52,6 +53,9 @@ app.whenReady().then(() => {
   })
 
   registerIpcHandlers()
+  void getCurrentWorkspace().catch((error) => {
+    console.error('Failed to initialize workspace on startup', error)
+  })
 
   createWindow()
 
